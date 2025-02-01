@@ -22,6 +22,9 @@ CREATE OR REPLACE FILE FORMAT parquet_ff
 
 CREATE OR REPLACE FILE FORMAT csv_ff
     type = 'csv' SKIP_HEADER=1;
+    -- faster ... will be default value soon
+    -- https://www.snowflake.com/en/engineering-blog/loading-terabytes-into-snowflake-speeds-feeds-techniques/
+
 
 --------------------------------------------------
 -- create internal stage ... to load files into
@@ -42,21 +45,21 @@ list @stage_parquet;
 
 -- read parquet as is
 select count(*) nb
-FROM  @stage_parquet/rentals_2020  (FILE_FORMAT => 'parquet_ff');
+FROM  @stage_parquet/rentals_2021  (FILE_FORMAT => 'parquet_ff');
 
 --------------------------------------------------
 -- loading .parquet into snowflake table
 --------------------------------------------------
 
 -- create table based on schema detection
-CREATE or replace TABLE rentals_2020 USING TEMPLATE (
+CREATE or replace TABLE rentals_2020_parquet USING TEMPLATE (
     SELECT ARRAY_AGG(OBJECT_CONSTRUCT(*)) -- discover schema from stage files :)
       -- select *
       FROM TABLE( INFER_SCHEMA( LOCATION=>'@stage_parquet/rentals_2020.parquet', FILE_FORMAT=>'parquet_ff' )) -- where TYPE in ('BINARY')
     );
 
 -- Load the parquet file using MATCH_BY_COLUMN_NAME.
-COPY INTO rentals_2020 FROM @stage_parquet/rentals_2020.parquet
+COPY INTO rentals_2020_parquet FROM @stage_parquet/rentals_2020.parquet
   FILE_FORMAT = ( FORMAT_NAME= 'parquet_ff' ) MATCH_BY_COLUMN_NAME=CASE_INSENSITIVE;
 -- 19s
 
@@ -70,18 +73,18 @@ select * from rentals limit 20;
 -- loading .csv into snowflake table
 --------------------------------------------------
 
-CREATE or replace TABLE rentals_2020_csv_gz as select * from rentals_2020 limit 0;
-CREATE or replace TABLE rentals_2020_csv_raw as select * from rentals_2020 limit 0;
+CREATE or replace TABLE rentals_2020_csv_gz as select * from rentals_2020_parquet limit 0;
+CREATE or replace TABLE rentals_2020_csv_raw as select * from rentals_2020_parquet limit 0;
 
 --9s
-COPY INTO rentals_2020_csv_gz FROM @stage_parquet/rentals_2020_gz.csv  FILE_FORMAT = ( FORMAT_NAME= 'csv_ff' ) ;
+COPY INTO rentals_2020_csv_gz FROM @stage_parquet/rentals_2020_gz.csv.gz  FILE_FORMAT = ( FORMAT_NAME= 'csv_ff' ) ;
 --9s
 COPY INTO rentals_2020_csv_raw FROM @stage_parquet/rentals_2020.csv  FILE_FORMAT = ( FORMAT_NAME= 'csv_ff' ) ;
 
 
-select 'rentals_2020' src, count(1) nb from rentals_2020
+select 'rentals_2020_parquet' src, count(1) nb from rentals_2020
 union all
-select 'rentals_2020_csv' src, count(1) nb from rentals_2020_csv_gz
+select 'rentals_2020_csv_gz' src, count(1) nb from rentals_2020_csv_gz
 union all
 select 'rentals_2020_csv_raw' src, count(1) nb from rentals_2020_csv_raw
 ;

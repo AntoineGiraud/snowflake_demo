@@ -34,7 +34,7 @@ def put_files_to_snowflake_stage(conn_snow, file_name, stage_name):
 
 put_files_to_snowflake_stage(
     conn_snow,
-    "data/*.parquet",
+    "data/rentals*.parquet",
     f"{snow['database']}.{snow['schema']}.{snow['stage']}",
 )
 
