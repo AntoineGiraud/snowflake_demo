@@ -1,3 +1,10 @@
+/*
+roles :
+- bikeshare_admin (granted to sysadmin)
+  - bikeshare_loader       using 💻 `bikeshare_loading_wh`      owns 🥉 bonze schemas
+  - bikeshare_transformer  using 💻 `bikeshare_transforming_wh` owns 🥈 silver & 🥇 gold schemas
+    - bikeshare_reader     using 💻 `bikeshare_reading_wh`      reads all schemas 🥉🥈🥇
+*/
 --------------------------------------------------------------------------
 -- prepare monitor & warehouse (loader, transformer, reader)
 --------------------------------------------------------------------------
