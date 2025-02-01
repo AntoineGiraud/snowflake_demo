@@ -1,123 +1,140 @@
-/*--
-In this Worksheet we will walk through creating a User in Snowflake.
+--------------------------------------------------------------------------
+-- prepare monitor & warehouse (loader, transformer, reader)
+--------------------------------------------------------------------------
+USE ROLE accountadmin;
+-- set daily quota for account
+CREATE OR REPLACE RESOURCE MONITOR account_monitor
+  WITH credit_quota = 10 frequency = daily start_timestamp = immediately
+  TRIGGERS ON 80 PERCENT DO NOTIFY ON 100 PERCENT DO SUSPEND ON 110 PERCENT DO SUSPEND_IMMEDIATE;
+ALTER ACCOUNT SET RESOURCE_MONITOR = account_monitor;
 
-For the User we will provide grants to a defined default role and default warehouse
-and then walk through viewing all other users and roles in our account.
+-- set daily quota for warehouse
+CREATE OR REPLACE RESOURCE MONITOR bikeshare_monitor_wh
+  WITH credit_quota = 10 frequency = daily start_timestamp = immediately
+  TRIGGERS ON 80 PERCENT DO NOTIFY ON 100 PERCENT DO SUSPEND ON 110 PERCENT DO SUSPEND_IMMEDIATE;
 
-To conclude, we will drop the created User.
---*/
+-- create warehouse
+create warehouse bikeshare_loading_wh -- 👨‍🏭
+    warehouse_size = xsmall auto_suspend = 60 auto_resume = true initially_suspended = true
+    resource_monitor = bikeshare_monitor_wh;
+create warehouse bikeshare_transforming_wh -- 👨‍🔧
+    warehouse_size = xsmall auto_suspend = 60 auto_resume = true initially_suspended = true
+    resource_monitor = bikeshare_monitor_wh;
+create warehouse bikeshare_reading_wh -- 🕵️‍♂️
+    warehouse_size = xsmall auto_suspend = 60 auto_resume = true initially_suspended = true
+    resource_monitor = bikeshare_monitor_wh;
 
+show warehouses;
 
--------------------------------------------------------------------------------------------
-    -- Step 1: To start, we first must set our Role context
-        -- USE ROLE: https://docs.snowflake.com/en/sql-reference/sql/use-role
-        -- System-Defined Roles: https://docs.snowflake.com/en/user-guide/security-access-control-overview#system-defined-roles
--------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------
+-- prepare db & schema & warehouse
+--------------------------------------------------------------------------
+USE ROLE sysadmin;
+USE WAREHOUSE compute_wh;
 
---> To run a single query, place your cursor in the query editor and select the Run button (⌘-Return).
---> To run the entire worksheet, select 'Run All' from the dropdown next to the Run button (⌘-Shift-Return).
+create database bikeshare;
+create or replace schema bronze comment = "🚲🥉 stores raw data";
+create or replace schema silver comment = "🚲🥈 stores staging & intermediate data";
+create or replace schema gold comment = "🚲🥇 stores data ready for use by analysts & viz/bi tools";
 
----> set our Role context
- USE ROLE USERADMIN;
+show schemas in database bikeshare;
 
--------------------------------------------------------------------------------------------
-    -- Step 2: Create our User
-        -- CREATE USER: https://docs.snowflake.com/en/sql-reference/sql/create-user
--------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------
+-- prepare roles (admin, loader, transformer, reader)
+--------------------------------------------------------------------------
+USE ROLE securityadmin;
 
----> now let's create a User using various available parameters.
-    -- NOTE: please fill out each section below before executing the query
+-- create main roles
+CREATE or replace ROLE bikeshare_admin comment = "🚲 admin role for bikeshare domain";
+CREATE or replace ROLE bikeshare_loader comment = "🚲 Loads data in 🥉 bronze layer (raw data)";
+CREATE or replace ROLE bikeshare_transformer comment = "🚲 Transforms data into silver & gold layers (🥈 staging/intermediate 🥇 datamart with dim & fct) (ex: dbt)";
+CREATE or replace ROLE bikeshare_reader comment = "🚲 Reads data from all layers 🥇🥈🥉 (ex: power bi, analyste)";
 
-CREATE OR REPLACE USER dbt_runner -- adjust user name
-    PASSWORD = 'xxxx' -- add a secure password
-    LOGIN_NAME = 'dbt_runner' -- add a login name
-    FIRST_NAME = 'DBT' -- add user's first name
-    LAST_NAME = 'Runner' -- add user's last name
-    EMAIL = 'dbt_runner@agiraud.com' -- add user's email
-    MUST_CHANGE_PASSWORD = false -- ensures a password reset on first login
-    DEFAULT_WAREHOUSE = COMPUTE_WH; -- set default warehouse to COMPUTE_WH
+-- set role depedencies & hook it to sysadmin
+grant role bikeshare_admin TO ROLE sysadmin;
+grant role bikeshare_loader TO ROLE bikeshare_admin;
+grant role bikeshare_transformer TO ROLE bikeshare_admin;
+grant role bikeshare_reader TO ROLE bikeshare_transformer;
 
--- pour créer la clé : https://interworks.com/blog/2021/09/28/zero-to-snowflake-key-pair-authentication-with-windows-openssh-client/
--- soit ...
--- ssh-keygen -t rsa -b 2048 -m pkcs8 -C "dbtrunner_snow" -f key_dbtrunner_agiraud_snowflake
--- ssh-keygen -e -f .\key_dbtrunner_agiraud_snowflake.pub -m pkcs8
--- on on colle ci-après ... la clé publique encryptée
-ALTER USER dbt_runner SET RSA_PUBLIC_KEY_2='3QIDAQAB';
+-------------------------------
+-- grants on db objects
+
+-- set ownership to main schemas
+GRANT ownership ON schema bikeshare.bronze TO ROLE bikeshare_loader;
+GRANT ownership ON schema bikeshare.silver TO ROLE bikeshare_transformer;
+GRANT ownership ON schema bikeshare.gold TO ROLE bikeshare_transformer;
+
+-- grant read to reader on all schemas
+GRANT USAGE ON DATABASE bikeshare TO role bikeshare_reader;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE bikeshare TO ROLE bikeshare_reader;
+GRANT USAGE ON FUTURE SCHEMAS IN DATABASE bikeshare TO ROLE bikeshare_reader;
+GRANT SELECT ON ALL TABLES IN DATABASE bikeshare TO ROLE bikeshare_reader;
+GRANT SELECT ON FUTURE TABLES IN DATABASE bikeshare TO ROLE bikeshare_reader;
+GRANT SELECT ON ALL VIEWS IN DATABASE bikeshare TO ROLE bikeshare_reader;
+GRANT SELECT ON FUTURE VIEWS IN DATABASE bikeshare TO ROLE bikeshare_reader;
+
+show roles;
+show grants on role bikeshare_reader;
+
+-------------------------------
+-- grants on warehouse
+
+grant all on warehouse bikeshare_loading_wh to role bikeshare_loader;
+grant all on warehouse bikeshare_transforming_wh to role bikeshare_transformer;
+grant all on warehouse bikeshare_reading_wh to role bikeshare_reader;
+
+--------------------------------------------------------------------------
+-- prepare service account
+--------------------------------------------------------------------------
+/*
+```bash
+# setup ssh key for your service account
+ssh-keygen -t rsa -b 2048 -m pkcs8 -C "agiraud_snow" -f key_agiraud_snowflake
+# show the public key to setup in snowflake (special format required)
+ssh-keygen -e -f .\key_agiraud_snowflake.pub -m pkcs8
+# copy past it in RSA_PUBLIC_KEY
+```
+*/
+
+USE ROLE USERADMIN;
+-- loader
+CREATE OR REPLACE USER loader_pc_ag_rog
+    type = SERVICE
+    DEFAULT_ROLE = bikeshare_loader
+    DEFAULT_WAREHOUSE = bikeshare_loading_wh
+    DEFAULT_NAMESPACE = bikeshare.bronze
+    COMMENT = "PC d'antoine : asus rog"
+    RSA_PUBLIC_KEY = 'MIIBxxxxxx';
+-- transformer
+CREATE OR REPLACE USER transformer_pc_ag_rog
+    type = SERVICE
+    DEFAULT_ROLE = bikeshare_transformer
+    DEFAULT_WAREHOUSE = bikeshare_transforming_wh
+    DEFAULT_NAMESPACE = bikeshare.silver
+    COMMENT = "PC d'antoine : asus rog"
+    RSA_PUBLIC_KEY = 'MIIBxxxxxx';
+-- reader
+CREATE OR REPLACE USER reader_pc_ag_rog
+    type = SERVICE
+    DEFAULT_ROLE = bikeshare_reader
+    DEFAULT_WAREHOUSE = bikeshare_reading_wh
+    DEFAULT_NAMESPACE = bikeshare.gold
+    COMMENT = "PC d'antoine : asus rog"
+    RSA_PUBLIC_KEY = 'MIIBxxxxxx';
+-- ALTER USER loader_pc_ag_rog SET RSA_PUBLIC_KEY_2='3QIDAQAB';
 
 show users;
 
-CREATE ROLE dbt_runner;
 
-/*--
-With the User created, send the following information in a secure manner
-to whomever the User is created for, so that they can access this Snowflake account:
-  --> Snowflake Account URL: This is the Snowflake account link that they'll need to login. You can find this link at the top of your browser:(ex: https://app.snowflake.com/xxxxxxx/xxxxxxxx/)
-  --> LOGIN_NAME: from above
-  --> PASSWORD: from above
---*/
+--------------------------------------------------------------------------
+-- grants for role bikeshare_loader
+--------------------------------------------------------------------------
+USE ROLE securityadmin;
 
--------------------------------------------------------------------------------------------
-    -- Step 3: Grant access to a Role and Warehouse for our User
-        -- USE ROLE: https://docs.snowflake.com/en/sql-reference/sql/use-role
-        -- GRANT ROLE: https://docs.snowflake.com/en/sql-reference/sql/grant-role
-        -- GRANT <privileges>: https://docs.snowflake.com/en/sql-reference/sql/grant-privilege
--------------------------------------------------------------------------------------------
+GRANT ROLE bikeshare_loader TO USER loader_pc_ag_rog;
+GRANT ROLE bikeshare_transformer TO USER transformer_pc_ag_rog;
+GRANT ROLE bikeshare_reader TO USER reader_pc_ag_rog;
+GRANT ROLE bikeshare_admin TO USER agiraudemo;
 
----> with the User created, let's use our SECURITYADMIN role to grant the SYSADMIN role and COMPUTE_WH warehouse to it
-USE ROLE SECURITYADMIN;
-
-    /*--
-      • Granting a role to another role creates a “parent-child” relationship between the roles (also referred to as a role hierarchy).
-      • Granting a role to a user enables the user to perform all operations allowed by the role (through the access privileges granted to the role).
-
-        NOTE: The SYSADMIN role has privileges to create warehouses, databases, and database objects in an account and grant those privileges to other roles.
-        Only grant this role to Users who should have these privileges. You can view other system-defined roles in the documentation below:
-            • https://docs.snowflake.com/en/user-guide/security-access-control-overview#label-access-control-overview-roles-system
-    --*/
-
--- grant role SYSADMIN to our User
-GRANT ROLE SYSADMIN TO USER dbt_runner;
-REVOKE ROLE SYSADMIN FROM USER dbt_runner;
-GRANT ROLE dbt_runner TO USER dbt_runner;
-
-
--- grant usage on the COMPUTE_WH warehouse to our SYSADMIN role
-GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE SYSADMIN;
-GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE DBT_RUNNER;
-
-set dbt_role = 'dbt_runner';
-set db_name = 'demo_dbt_jaffleshop';
-select $db_name, $dbt_role;
-
-grant all privileges on database identifier($db_name) to role identifier($dbt_role);
-grant all privileges on ALL SCHEMAS IN DATABASE identifier($db_name) to role identifier($dbt_role);
-
-GRANT USAGE ON DATABASE identifier($db_name) TO role identifier($dbt_role);
-GRANT USAGE ON ALL SCHEMAS IN DATABASE identifier($db_name) TO ROLE identifier($dbt_role);
-GRANT USAGE ON FUTURE SCHEMAS IN DATABASE identifier($db_name) TO ROLE identifier($dbt_role);
-GRANT SELECT ON ALL TABLES IN DATABASE identifier($db_name) TO ROLE identifier($dbt_role);
-GRANT SELECT ON FUTURE TABLES IN DATABASE identifier($db_name) TO ROLE identifier($dbt_role);
-
--------------------------------------------------------------------------------------------
-    -- Step 4: Explore all Users and Roles in our Account
-        -- USE ROLE: https://docs.snowflake.com/en/sql-reference/sql/use-role
-        -- SHOW USERS: https://docs.snowflake.com/en/sql-reference/sql/show-users
-        -- SHOW ROLES: https://docs.snowflake.com/en/sql-reference/sql/show-roles
--------------------------------------------------------------------------------------------
-
----> let's now explore all users and roles in our account using our ACCOUNTADMIN role
-USE ROLE ACCOUNTADMIN;
-
--- show all users in account
-SHOW USERS;
-
--- show all roles in account
-SHOW ROLES;
-
--------------------------------------------------------------------------------------------
-    -- Step 5: Drop our created Users
-        -- DROP USER: https://docs.snowflake.com/en/sql-reference/sql/drop-user
--------------------------------------------------------------------------------------------
-
----> to drop the user, we could execute the following command
-DROP USER <insert user name here>;
+show grants on role bikeshare_loader;
+show grants on user reader_pc_ag_rog;
