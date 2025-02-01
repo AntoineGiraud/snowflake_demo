@@ -1,0 +1,16 @@
+db:
+  host: xxx\xINSTANCEx
+  user: xxxx
+  password: xxx
+  dbname: xxxx
+  schema: OMxxx
+  port: 1433
+snow:
+  account: xxxxxx.west-europe.azure
+  private_key_path: C:\Users\YourUser\.ssh\key_loader
+  role: bikeshare_loader
+  warehouse: bikeshare_loading_wh
+  user: loader_usr
+  database: bikeshare
+  schema: bronze
+  stage: stage_parquet

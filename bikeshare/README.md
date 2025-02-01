@@ -17,7 +17,7 @@ Here is the roles implemented by `bikeshare_init_roleSchemasGrantsUser.sql`
       using 💻 `bikeshare_reading_wh`<br>
       reads all schemas 🥉🥈🥇
 
-![bikeshare_roles_and_schemas](./bikeshare/bikeshare_roles_and_schemas.png)
+![bikeshare_roles_and_schemas](./bikeshare_roles_and_schemas.png)
 
 inspirations
 - dbt [how we use snowflake](https://discourse.getdbt.com/t/setting-up-snowflake-the-exact-grant-statements-we-run/439)

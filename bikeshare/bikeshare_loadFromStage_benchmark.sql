@@ -25,7 +25,7 @@ CREATE OR REPLACE FILE FORMAT parquet_ff
 drop STAGE if exists stage_parquet;
 -- add stage to drop parquet in
 CREATE STAGE stage_parquet
-  FILE_FORMAT = (type = 'PARQUET');
+  FILE_FORMAT = (FORMAT_NAME = 'parquet_ff');
 
 -- from SnowSQL
 -- PUT file://myFolder/*.parquet @stage_parquet;

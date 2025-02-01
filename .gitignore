@@ -1,1 +1,4 @@
 *.pdf
+conf.yml
+uv.lock
+*.parquet
