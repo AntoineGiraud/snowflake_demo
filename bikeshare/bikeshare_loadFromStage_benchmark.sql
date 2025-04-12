@@ -104,7 +104,7 @@ group by 1;
 select * from rentals_2020_parquet limit 10;
 
 --------------------------------------------------
--- gcs external storage
+-- gcs init external storage
 --------------------------------------------------
 -- doc: https://docs.snowflake.com/en/user-guide/data-load-gcs-config
 use role accountadmin;
@@ -134,6 +134,9 @@ CREATE STAGE gcs_stage_bikeshare
 select *
 FROM TABLE( INFER_SCHEMA( LOCATION=>'@gcs_stage_bikeshare/rentals', FILE_FORMAT=>'parquet_ff' ));
 
+--------------------------------------------------
+-- gcs let's try external storage
+--------------------------------------------------
 -- external table
 CREATE or replace EXTERNAL TABLE ext_gcs_rentals
 (

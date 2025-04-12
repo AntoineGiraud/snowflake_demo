@@ -21,3 +21,5 @@ Here is the roles implemented by `bikeshare_init_roleSchemasGrantsUser.sql`
 
 inspirations
 - dbt [how we use snowflake](https://discourse.getdbt.com/t/setting-up-snowflake-the-exact-grant-statements-we-run/439)
+
+![snowflake_load_perf](./bikeshare/snowflake_load_perf.png)

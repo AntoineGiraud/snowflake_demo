@@ -33,8 +33,10 @@ create warehouse bikeshare_reading_wh -- 🕵️‍♂️
 
 show warehouses;
 
+grant all on warehouse compute_wh to role sysadmin;
+
 --------------------------------------------------------------------------
--- prepare db & schema & warehouse
+-- prepare db & schema
 --------------------------------------------------------------------------
 USE ROLE sysadmin;
 USE WAREHOUSE compute_wh;
@@ -71,6 +73,7 @@ GRANT ownership ON schema bikeshare.bronze TO ROLE bikeshare_loader;
 GRANT ownership ON schema bikeshare.silver TO ROLE bikeshare_transformer;
 GRANT ownership ON schema bikeshare.gold TO ROLE bikeshare_transformer;
 
+GRANT USAGE ON DATABASE bikeshare TO role bikeshare_loader;
 -- grant read to reader on all schemas
 GRANT USAGE ON DATABASE bikeshare TO role bikeshare_reader;
 GRANT USAGE ON ALL SCHEMAS IN DATABASE bikeshare TO ROLE bikeshare_reader;
@@ -110,25 +113,27 @@ CREATE OR REPLACE USER loader_pc_ag_rog
     DEFAULT_ROLE = bikeshare_loader
     DEFAULT_WAREHOUSE = bikeshare_loading_wh
     DEFAULT_NAMESPACE = bikeshare.bronze
-    COMMENT = "PC d'antoine : asus rog"
-    RSA_PUBLIC_KEY = 'MIIBxxxxxx';
+    COMMENT = "PC d'antoine : asus rog";
+    -- RSA_PUBLIC_KEY = 'MIIBxxxxxx';
 -- transformer
 CREATE OR REPLACE USER transformer_pc_ag_rog
     type = SERVICE
     DEFAULT_ROLE = bikeshare_transformer
     DEFAULT_WAREHOUSE = bikeshare_transforming_wh
     DEFAULT_NAMESPACE = bikeshare.silver
-    COMMENT = "PC d'antoine : asus rog"
-    RSA_PUBLIC_KEY = 'MIIBxxxxxx';
+    COMMENT = "PC d'antoine : asus rog";
+    --RSA_PUBLIC_KEY = 'MIIBxxxxxx';
 -- reader
 CREATE OR REPLACE USER reader_pc_ag_rog
     type = SERVICE
     DEFAULT_ROLE = bikeshare_reader
     DEFAULT_WAREHOUSE = bikeshare_reading_wh
     DEFAULT_NAMESPACE = bikeshare.gold
-    COMMENT = "PC d'antoine : asus rog"
-    RSA_PUBLIC_KEY = 'MIIBxxxxxx';
--- ALTER USER loader_pc_ag_rog SET RSA_PUBLIC_KEY_2='3QIDAQAB';
+    COMMENT = "PC d'antoine : asus rog";
+    -- RSA_PUBLIC_KEY = 'MIIBxxxxxx';
+ALTER USER loader_pc_ag_rog SET RSA_PUBLIC_KEY_2='3QIDAQAB';
+ALTER USER transformer_pc_ag_rog SET RSA_PUBLIC_KEY_2='3QIDAQAB';
+ALTER USER reader_pc_ag_rog SET RSA_PUBLIC_KEY_2='3QIDAQAB';
 
 show users;
 
