@@ -8,7 +8,7 @@ Inspiration : [dbt - how we use snowflake](https://discourse.getdbt.com/t/settin
 
 Here is the roles implemented by `bikeshare_init_roleSchemasGrantsUser.sql`
 
-- bikeshare_**admin** * - granted to sysadmin*
+- bikeshare_**admin** *- granted to sysadmin*
   - bikeshare_**loader**       <br>
       uses 💻 `bikeshare_loading_wh`<br>
       owns 🥉 bonze schemas

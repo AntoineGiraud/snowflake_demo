@@ -6,40 +6,43 @@ roles :
     - bikeshare_reader     using 💻 `bikeshare_reading_wh`      reads all schemas 🥉🥈🥇
 */
 --------------------------------------------------------------------------
--- prepare monitor & warehouse (loader, transformer, reader)
+-- prepare monitor & warehouses (loader, transformer, reader)
 --------------------------------------------------------------------------
-USE ROLE accountadmin;
+use role accountadmin;
+
 -- set daily quota for account
-CREATE OR REPLACE RESOURCE MONITOR account_monitor
-  WITH credit_quota = 10 frequency = daily start_timestamp = immediately
-  TRIGGERS ON 80 PERCENT DO NOTIFY ON 100 PERCENT DO SUSPEND ON 110 PERCENT DO SUSPEND_IMMEDIATE;
-ALTER ACCOUNT SET RESOURCE_MONITOR = account_monitor;
+create or replace resource monitor account_monitor
+  with credit_quota = 10 frequency = daily start_timestamp = immediately
+  triggers on 80 percent do notify on 100 percent do suspend on 110 percent do suspend_immediate;
+alter account set resource_monitor = account_monitor;
 
 -- set daily quota for warehouse
-CREATE OR REPLACE RESOURCE MONITOR bikeshare_monitor_wh
-  WITH credit_quota = 10 frequency = daily start_timestamp = immediately
-  TRIGGERS ON 80 PERCENT DO NOTIFY ON 100 PERCENT DO SUSPEND ON 110 PERCENT DO SUSPEND_IMMEDIATE;
+create or replace resource monitor bikeshare_monitor_wh
+  with credit_quota = 10 frequency = daily start_timestamp = immediately
+  triggers on 80 percent do notify on 100 percent do suspend on 110 percent do suspend_immediate;
 
 -- create warehouse
-create warehouse bikeshare_loading_wh -- 👨‍🏭
+create or replace warehouse bikeshare_loading_wh -- 👨‍🏭
     warehouse_size = xsmall auto_suspend = 60 auto_resume = true initially_suspended = true
     resource_monitor = bikeshare_monitor_wh;
-create warehouse bikeshare_transforming_wh -- 👨‍🔧
+create or replace warehouse bikeshare_transforming_wh -- 👨‍🔧
     warehouse_size = xsmall auto_suspend = 60 auto_resume = true initially_suspended = true
     resource_monitor = bikeshare_monitor_wh;
-create warehouse bikeshare_reading_wh -- 🕵️‍♂️
+create or replace warehouse bikeshare_reading_wh -- 🕵️‍♂️
     warehouse_size = xsmall auto_suspend = 60 auto_resume = true initially_suspended = true
     resource_monitor = bikeshare_monitor_wh;
 
 show warehouses;
 
+-- par défaut sys admin n'est plus owner de warehouse compute_wh
+use role securityadmin;
 grant all on warehouse compute_wh to role sysadmin;
 
 --------------------------------------------------------------------------
 -- prepare db & schema
 --------------------------------------------------------------------------
-USE ROLE sysadmin;
-USE WAREHOUSE compute_wh;
+use role sysadmin;
+use WAREHOuse compute_wh;
 
 create database bikeshare;
 create or replace schema bronze comment = "🚲🥉 stores raw data";
@@ -51,39 +54,40 @@ show schemas in database bikeshare;
 --------------------------------------------------------------------------
 -- prepare roles (admin, loader, transformer, reader)
 --------------------------------------------------------------------------
-USE ROLE securityadmin;
+use role securityadmin;
 
 -- create main roles
-CREATE or replace ROLE bikeshare_admin comment = "🚲 admin role for bikeshare domain";
-CREATE or replace ROLE bikeshare_loader comment = "🚲 Loads data in 🥉 bronze layer (raw data)";
-CREATE or replace ROLE bikeshare_transformer comment = "🚲 Transforms data into silver & gold layers (🥈 staging/intermediate 🥇 datamart with dim & fct) (ex: dbt)";
-CREATE or replace ROLE bikeshare_reader comment = "🚲 Reads data from all layers 🥇🥈🥉 (ex: power bi, analyste)";
+create or replace role bikeshare_admin comment = "🚲 admin role for bikeshare domain";
+create or replace role bikeshare_loader comment = "🚲 Loads data in 🥉 bronze layer (raw data)";
+create or replace role bikeshare_transformer comment = "🚲 Transforms data into silver & gold layers (🥈 staging/intermediate 🥇 datamart with dim & fct) (ex: dbt)";
+create or replace role bikeshare_reader comment = "🚲 Reads data from all layers 🥇🥈🥉 (ex: power bi, analyste)";
+
+show roles;
 
 -- set role depedencies & hook it to sysadmin
-grant role bikeshare_admin TO ROLE sysadmin;
-grant role bikeshare_loader TO ROLE bikeshare_admin;
-grant role bikeshare_transformer TO ROLE bikeshare_admin;
-grant role bikeshare_reader TO ROLE bikeshare_transformer;
+grant role bikeshare_admin to role sysadmin;
+grant role bikeshare_loader to role bikeshare_admin;
+grant role bikeshare_transformer to role bikeshare_admin;
+grant role bikeshare_reader to role bikeshare_transformer;
 
 -------------------------------
 -- grants on db objects
 
 -- set ownership to main schemas
-GRANT ownership ON schema bikeshare.bronze TO ROLE bikeshare_loader;
-GRANT ownership ON schema bikeshare.silver TO ROLE bikeshare_transformer;
-GRANT ownership ON schema bikeshare.gold TO ROLE bikeshare_transformer;
+grant ownership ON schema bikeshare.bronze to role bikeshare_loader;
+grant ownership ON schema bikeshare.silver to role bikeshare_transformer;
+grant ownership ON schema bikeshare.gold to role bikeshare_transformer;
 
-GRANT USAGE ON DATABASE bikeshare TO role bikeshare_loader;
+grant USAGE ON DATABASE bikeshare to role bikeshare_loader;
 -- grant read to reader on all schemas
-GRANT USAGE ON DATABASE bikeshare TO role bikeshare_reader;
-GRANT USAGE ON ALL SCHEMAS IN DATABASE bikeshare TO ROLE bikeshare_reader;
-GRANT USAGE ON FUTURE SCHEMAS IN DATABASE bikeshare TO ROLE bikeshare_reader;
-GRANT SELECT ON ALL TABLES IN DATABASE bikeshare TO ROLE bikeshare_reader;
-GRANT SELECT ON FUTURE TABLES IN DATABASE bikeshare TO ROLE bikeshare_reader;
-GRANT SELECT ON ALL VIEWS IN DATABASE bikeshare TO ROLE bikeshare_reader;
-GRANT SELECT ON FUTURE VIEWS IN DATABASE bikeshare TO ROLE bikeshare_reader;
+grant USAGE ON DATABASE bikeshare to role bikeshare_reader;
+grant USAGE ON ALL SCHEMAS IN DATABASE bikeshare to role bikeshare_reader;
+grant USAGE ON FUTURE SCHEMAS IN DATABASE bikeshare to role bikeshare_reader;
+grant SELECT ON ALL TABLES IN DATABASE bikeshare to role bikeshare_reader;
+grant SELECT ON FUTURE TABLES IN DATABASE bikeshare to role bikeshare_reader;
+grant SELECT ON ALL VIEWS IN DATABASE bikeshare to role bikeshare_reader;
+grant SELECT ON FUTURE VIEWS IN DATABASE bikeshare to role bikeshare_reader;
 
-show roles;
 show grants on role bikeshare_reader;
 
 -------------------------------
@@ -102,38 +106,38 @@ grant all on warehouse bikeshare_reading_wh to role bikeshare_reader;
 ssh-keygen -t rsa -b 2048 -m pkcs8 -C "agiraud_snow" -f key_agiraud_snowflake
 # show the public key to setup in snowflake (special format required)
 ssh-keygen -e -f .\key_agiraud_snowflake.pub -m pkcs8
-# copy past it in RSA_PUBLIC_KEY
+# copy past it in rsa_public_key
 ```
 */
 
-USE ROLE USERADMIN;
+use role USERADMIN;
 -- loader
-CREATE OR REPLACE USER loader_pc_ag_rog
-    type = SERVICE
-    DEFAULT_ROLE = bikeshare_loader
-    DEFAULT_WAREHOUSE = bikeshare_loading_wh
-    DEFAULT_NAMESPACE = bikeshare.bronze
-    COMMENT = "PC d'antoine : asus rog";
-    -- RSA_PUBLIC_KEY = 'MIIBxxxxxx';
+create or replace user loader_pc_ag_rog
+    type = service
+    default_role = bikeshare_loader
+    default_warehouse = bikeshare_loading_wh
+    default_namespace = bikeshare.bronze
+    comment = "PC d'antoine : asus rog";
+    -- rsa_public_key = 'MIIBxxxxxx';
 -- transformer
-CREATE OR REPLACE USER transformer_pc_ag_rog
-    type = SERVICE
-    DEFAULT_ROLE = bikeshare_transformer
-    DEFAULT_WAREHOUSE = bikeshare_transforming_wh
-    DEFAULT_NAMESPACE = bikeshare.silver
-    COMMENT = "PC d'antoine : asus rog";
-    --RSA_PUBLIC_KEY = 'MIIBxxxxxx';
+create or replace user transformer_pc_ag_rog
+    type = service
+    default_role = bikeshare_transformer
+    default_warehouse = bikeshare_transforming_wh
+    default_namespace = bikeshare.silver
+    comment = "PC d'antoine : asus rog";
+    --rsa_public_key = 'MIIBxxxxxx';
 -- reader
-CREATE OR REPLACE USER reader_pc_ag_rog
-    type = SERVICE
-    DEFAULT_ROLE = bikeshare_reader
-    DEFAULT_WAREHOUSE = bikeshare_reading_wh
-    DEFAULT_NAMESPACE = bikeshare.gold
-    COMMENT = "PC d'antoine : asus rog";
-    -- RSA_PUBLIC_KEY = 'MIIBxxxxxx';
-ALTER USER loader_pc_ag_rog SET RSA_PUBLIC_KEY_2='3QIDAQAB';
-ALTER USER transformer_pc_ag_rog SET RSA_PUBLIC_KEY_2='3QIDAQAB';
-ALTER USER reader_pc_ag_rog SET RSA_PUBLIC_KEY_2='3QIDAQAB';
+create or replace user reader_pc_ag_rog
+    type = service
+    default_role = bikeshare_reader
+    default_warehouse = bikeshare_reading_wh
+    default_namespace = bikeshare.gold
+    comment = "PC d'antoine : asus rog";
+    -- rsa_public_key = 'MIIBxxxxxx';
+alter user loader_pc_ag_rog set rsa_public_key_2='3QIDAQAB';
+alter user transformer_pc_ag_rog set rsa_public_key_2='3QIDAQAB';
+alter user reader_pc_ag_rog set rsa_public_key_2='3QIDAQAB';
 
 show users;
 
@@ -141,12 +145,35 @@ show users;
 --------------------------------------------------------------------------
 -- grants for role bikeshare_loader
 --------------------------------------------------------------------------
-USE ROLE securityadmin;
+use role securityadmin;
 
-GRANT ROLE bikeshare_loader TO USER loader_pc_ag_rog;
-GRANT ROLE bikeshare_transformer TO USER transformer_pc_ag_rog;
-GRANT ROLE bikeshare_reader TO USER reader_pc_ag_rog;
-GRANT ROLE bikeshare_admin TO USER agiraudemo;
+grant role bikeshare_loader to user loader_pc_ag_rog;
+grant role bikeshare_transformer to user transformer_pc_ag_rog;
+grant role bikeshare_reader to user reader_pc_ag_rog;
+grant role bikeshare_admin to user agiraudemo;
 
 show grants on role bikeshare_loader;
 show grants on user reader_pc_ag_rog;
+
+--------------------------------------------------------------------------
+-- 🧨 drop all
+--------------------------------------------------------------------------
+use role accountadmin;
+-- database
+drop database if exists bikeshare cascade;
+-- roles
+drop role if exists bikeshare_loader;
+drop role if exists bikeshare_reader;
+drop role if exists bikeshare_transformer;
+drop role if exists bikeshare_admin;
+-- users
+drop user if exists loader_pc_ag_rog;
+drop user if exists transformer_pc_ag_rog;
+drop user if exists reader_pc_ag_rog;
+-- warehouses
+drop warehouse if exists bikeshare_loading_wh;
+drop warehouse if exists bikeshare_transforming_wh;
+drop warehouse if exists bikeshare_reading_wh;
+-- ressource monitor
+drop resource monitor if exists bikeshare_monitor_wh;
+drop resource monitor if exists account_monitor;
